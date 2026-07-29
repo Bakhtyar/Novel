@@ -12,6 +12,9 @@ class StoryRepository(private val dao: StoryDao) {
     fun getNodes(projectId: Long, parentNodeId: Long = 0L): Flow<List<CanvasNodeEntity>> =
         dao.getNodesForProject(projectId, parentNodeId)
 
+    fun getAllNodes(projectId: Long): Flow<List<CanvasNodeEntity>> =
+        dao.getAllNodesForProject(projectId)
+
     suspend fun insertNode(node: CanvasNodeEntity): Long = dao.insertNode(node)
     suspend fun updateNode(node: CanvasNodeEntity) = dao.updateNode(node)
     suspend fun deleteNode(node: CanvasNodeEntity) {

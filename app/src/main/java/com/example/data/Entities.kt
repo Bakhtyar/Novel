@@ -39,6 +39,7 @@ data class CanvasNodeEntity(
     val boundaryGroup: String = "",
     val linkUrl: String = "",
     val documentNote: String = "", // Dedicated full-page document note content
+    val orderIndex: Int = 0,
     val updatedAt: Long = System.currentTimeMillis()
 )
 

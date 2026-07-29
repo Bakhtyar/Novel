@@ -29,6 +29,8 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
 import com.example.audio.SoundEffectManager
 import com.example.data.CanvasNodeEntity
 import com.example.ui.components.AmbientGlowBackground
@@ -69,6 +71,7 @@ fun CanvasScreen(
 
     val nodes by viewModel.nodes.collectAsState()
     val connections by viewModel.connections.collectAsState()
+    val nodeNumbers by viewModel.nodeNumbers.collectAsState()
 
     var offsetX by remember { mutableFloatStateOf(0f) }
     var offsetY by remember { mutableFloatStateOf(0f) }
@@ -79,6 +82,7 @@ fun CanvasScreen(
     var newNodeContent by remember { mutableStateOf("") }
     var newNodeType by remember { mutableStateOf("Event") }
     var newNodeColorHex by remember { mutableStateOf("#3B82F6") }
+    var newNodePosition by remember { mutableStateOf<Offset?>(null) }
     var showStructureMenu by remember { mutableStateOf(false) }
     var showExportDialog by remember { mutableStateOf(false) }
 
@@ -87,6 +91,7 @@ fun CanvasScreen(
 
     // State for smooth dragging
     val draggingOffsets = remember { mutableStateMapOf<Long, Offset>() }
+    val density = androidx.compose.ui.platform.LocalDensity.current
 
     // Search filter
     val filteredNodes = nodes.filter { node ->
@@ -207,49 +212,7 @@ fun CanvasScreen(
                 )
             )
         },
-        floatingActionButton = {
-            var expanded by remember { mutableStateOf(false) }
-            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                AnimatedVisibility(visible = expanded, enter = fadeIn() + slideInVertically { it }, exit = fadeOut() + slideOutVertically { it }) {
-                    Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        ExtendedFloatingActionButton(
-                            onClick = { expanded = false; showAddDialog = true; newNodeType = "Main Topic" },
-                            text = { Text("Main Topic", fontWeight = FontWeight.Bold) },
-                            icon = { Icon(Icons.Default.Topic, null) },
-                            containerColor = MaterialTheme.colorScheme.secondaryContainer
-                        )
-                        ExtendedFloatingActionButton(
-                            onClick = { expanded = false; showAddDialog = true; newNodeType = "Subtopic" },
-                            text = { Text("Subtopic") },
-                            icon = { Icon(Icons.Default.AccountTree, null) },
-                            containerColor = MaterialTheme.colorScheme.secondaryContainer
-                        )
-                        ExtendedFloatingActionButton(
-                            onClick = { expanded = false; showAddDialog = true; newNodeType = "Idea" },
-                            text = { Text("Floating Idea") },
-                            icon = { Icon(Icons.Default.Lightbulb, null) },
-                            containerColor = MaterialTheme.colorScheme.secondaryContainer
-                        )
-                        ExtendedFloatingActionButton(
-                            onClick = { expanded = false; showAddDialog = true; newNodeType = "Chapter" },
-                            text = { Text("Chapter") },
-                            icon = { Icon(Icons.Default.MenuBook, null) },
-                            containerColor = MaterialTheme.colorScheme.secondaryContainer
-                        )
-                    }
-                }
-                FloatingActionButton(
-                    onClick = {
-                        SoundEffectManager.playClick()
-                        expanded = !expanded
-                    },
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.testTag("add_node_fab")
-                ) {
-                    Icon(if (expanded) Icons.Default.Close else Icons.Default.Add, contentDescription = Strings.get("add_node", lang))
-                }
-            }
-        },
+        floatingActionButton = {},
         contentWindowInsets = WindowInsets.safeDrawing
     ) { innerPadding ->
         Box(
@@ -264,19 +227,28 @@ fun CanvasScreen(
                 modifier = Modifier.fillMaxSize()
             )
 
-            // Pan & Pinch-to-Zoom Workspace
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .pointerInput(Unit) {
-                        detectTransformGestures { _, pan, zoom, _ ->
-                            val newZoom = (zoomScale * zoom).coerceIn(0.3f, 3.0f)
-                            zoomScale = newZoom
-                            offsetX += pan.x
-                            offsetY += pan.y
+            // Cinematic Lightning Effect
+            com.example.ui.components.CinematicLightningEffect(
+                isEnabled = viewModel.isLightningEffectEnabled,
+                colorHex = viewModel.lightningColorHex,
+                modifier = Modifier.fillMaxSize()
+            )
+
+            val originalLayoutDirection = LocalLayoutDirection.current
+            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                // Pan & Pinch-to-Zoom Workspace
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .pointerInput(Unit) {
+                            detectTransformGestures { _, pan, zoom, _ ->
+                                val newZoom = (zoomScale * zoom).coerceIn(0.3f, 3.0f)
+                                zoomScale = newZoom
+                                offsetX += pan.x
+                                offsetY += pan.y
+                            }
                         }
-                    }
-            ) {
+                ) {
                 // Tilemap Grid
                 Canvas(modifier = Modifier.fillMaxSize()) {
                     if (viewModel.isGridVisible) {
@@ -371,8 +343,10 @@ fun CanvasScreen(
 
                             SmartStoryNodeCard(
                                 node = displayNode,
+                                numberLabel = nodeNumbers[node.id],
                                 lang = lang,
                                 zoomScale = zoomScale,
+                                isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl,
                                 dragOffset = draggingOffsets[node.id] ?: Offset.Zero,
                                 onDragUpdate = { offset ->
                                     draggingOffsets[node.id] = offset
@@ -410,6 +384,7 @@ fun CanvasScreen(
                     }
                 }
             }
+            } // Close CompositionLocalProvider
 
             // Tilemap Floating Control Dock
             Surface(
@@ -498,13 +473,35 @@ fun CanvasScreen(
                     }
                 }
             }
+            
+            // Drag and Drop Toolbox Dock
+            com.example.ui.components.ToolboxDock(
+                lang = lang,
+                onToolDropped = { type, screenPosition ->
+                    SoundEffectManager.playClick()
+                    val density = density.density
+                    
+                    val canvasX = (screenPosition.x - offsetX) / zoomScale / density
+                    val canvasY = (screenPosition.y - offsetY) / zoomScale / density
+                    
+                    newNodeType = type
+                    newNodePosition = Offset(canvasX, canvasY)
+                    showAddDialog = true
+                },
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(bottom = 16.dp)
+            )
         }
     }
 
     // Add Node Dialog
     if (showAddDialog) {
         AlertDialog(
-            onDismissRequest = { showAddDialog = false },
+            onDismissRequest = { 
+                showAddDialog = false
+                newNodePosition = null
+            },
             title = { Text(Strings.get("add_node", lang)) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -527,26 +524,12 @@ fun CanvasScreen(
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Bold
                     )
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        tileColors.forEach { hex ->
-                            val color = try { Color(android.graphics.Color.parseColor(hex)) } catch (_: Exception) { Color.Blue }
-                            Box(
-                                modifier = Modifier
-                                    .size(32.dp)
-                                    .clip(CircleShape)
-                                    .background(color)
-                                    .border(
-                                        width = if (newNodeColorHex == hex) 2.dp else 0.dp,
-                                        color = if (newNodeColorHex == hex) MaterialTheme.colorScheme.onSurface else Color.Transparent,
-                                        shape = CircleShape
-                                    )
-                                    .clickable { newNodeColorHex = hex }
-                            )
-                        }
-                    }
+                    
+                    com.example.ui.components.HsvColorPicker(
+                        colorHex = newNodeColorHex,
+                        onColorChanged = { newNodeColorHex = it },
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
             },
             confirmButton = {
@@ -558,11 +541,12 @@ fun CanvasScreen(
                                 content = newNodeContent,
                                 nodeType = newNodeType,
                                 colorHex = newNodeColorHex,
-                                x = (200f - offsetX) / zoomScale,
-                                y = (200f - offsetY) / zoomScale
+                                x = newNodePosition?.x ?: ((200f - offsetX) / zoomScale),
+                                y = newNodePosition?.y ?: ((200f - offsetY) / zoomScale)
                             )
                             newNodeTitle = ""
                             newNodeContent = ""
+                            newNodePosition = null
                             showAddDialog = false
                         }
                     }
@@ -571,7 +555,10 @@ fun CanvasScreen(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showAddDialog = false }) {
+                TextButton(onClick = { 
+                    showAddDialog = false
+                    newNodePosition = null
+                }) {
                     Text(Strings.get("cancel", lang))
                 }
             }
@@ -651,8 +638,10 @@ fun CanvasScreen(
 @Composable
 fun SmartStoryNodeCard(
     node: CanvasNodeEntity,
+    numberLabel: String?,
     lang: String,
     zoomScale: Float,
+    isRtl: Boolean,
     dragOffset: Offset,
     onDragUpdate: (Offset) -> Unit,
     onDragEnd: (Float, Float) -> Unit,
@@ -745,11 +734,14 @@ fun SmartStoryNodeCard(
                     shape = RoundedCornerShape(18.dp)
                 )
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(14.dp)
+            CompositionLocalProvider(
+                LocalLayoutDirection provides if (isRtl) LayoutDirection.Rtl else LayoutDirection.Ltr
             ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp)
+                ) {
                 // Header: Marker Icon + Node Type Badge + Connect Button
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -799,13 +791,30 @@ fun SmartStoryNodeCard(
 
                 Spacer(modifier = Modifier.height(6.dp))
 
-                Text(
-                    text = node.title,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White,
-                    maxLines = 1
-                )
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    if (numberLabel != null) {
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = Color.Black.copy(alpha = 0.3f)
+                        ) {
+                            Text(
+                                text = numberLabel,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White,
+                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+                    Text(
+                        text = node.title,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                        maxLines = 1,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                }
 
                 if (node.content.isNotBlank()) {
                     Spacer(modifier = Modifier.height(2.dp))
@@ -850,7 +859,8 @@ fun SmartStoryNodeCard(
                         }
                     }
                 }
-            }
-        }
-    }
+            } // Close Column
+            } // Close CompositionLocalProvider
+        } // Close Card
+    } // Close Box
 }

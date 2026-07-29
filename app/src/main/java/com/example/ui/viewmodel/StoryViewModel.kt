@@ -39,6 +39,10 @@ class StoryViewModel(application: Application) : AndroidViewModel(application) {
     // Ambient Glow settings
     var ambientGlowColorHex by mutableStateOf("#8B5CF6") // Default Deep Violet
 
+    // Lightning Effect Settings
+    var isLightningEffectEnabled by mutableStateOf(true)
+    var lightningColorHex by mutableStateOf("#3B82F6")
+
     // SFX setting
     var isSfxEnabled by mutableStateOf(true)
 
@@ -53,6 +57,8 @@ class StoryViewModel(application: Application) : AndroidViewModel(application) {
 
     var selectedNodeForDetail by mutableStateOf<CanvasNodeEntity?>(null)
     var selectedDocumentNode by mutableStateOf<CanvasNodeEntity?>(null) // Full Document Editor
+    val isNumberingEnabled = MutableStateFlow(true)
+    val nodeNumbers = MutableStateFlow<Map<Long, String>>(emptyMap())
     var isPresentationMode by mutableStateOf(false)
 
     var isSketchModalOpen by mutableStateOf(false)
@@ -79,7 +85,7 @@ class StoryViewModel(application: Application) : AndroidViewModel(application) {
 
     val allProjectNodes: StateFlow<List<CanvasNodeEntity>> = _currentProjectIdFlow.flatMapLatest { pid ->
         if (pid == null) flowOf(emptyList())
-        else repository.getNodes(pid, 0L)
+        else repository.getAllNodes(pid)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val connections: StateFlow<List<NodeConnectionEntity>> = _currentProjectIdFlow.flatMapLatest { pid ->
@@ -91,6 +97,35 @@ class StoryViewModel(application: Application) : AndroidViewModel(application) {
         val dao = AppDatabase.getDatabase(application).storyDao()
         repository = StoryRepository(dao)
         projects = repository.allProjects.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+        
+        viewModelScope.launch {
+            kotlinx.coroutines.flow.combine(allProjectNodes, isNumberingEnabled) { allNodes, enabled ->
+                if (enabled) {
+                    calculateNodeNumbers(allNodes)
+                } else {
+                    emptyMap()
+                }
+            }.collect { numbers ->
+                nodeNumbers.value = numbers
+            }
+        }
+    }
+
+    private fun calculateNodeNumbers(nodes: List<CanvasNodeEntity>): Map<Long, String> {
+        val result = mutableMapOf<Long, String>()
+        val childrenMap = nodes.groupBy { it.parentNodeId }
+        
+        fun traverse(parentId: Long, prefix: String) {
+            val children = childrenMap[parentId]?.sortedBy { it.orderIndex } ?: return
+            for ((index, child) in children.withIndex()) {
+                val num = index + 1
+                val label = if (prefix.isEmpty()) "$num" else "$prefix.$num"
+                result[child.id] = label
+                traverse(child.id, label)
+            }
+        }
+        traverse(0L, "")
+        return result
     }
 
     fun changeLanguage(lang: String) {
@@ -270,6 +305,7 @@ class StoryViewModel(application: Application) : AndroidViewModel(application) {
         val finalX = if (isSnapToGrid) (kotlin.math.round(x / gridSize) * gridSize) else x
         val finalY = if (isSnapToGrid) (kotlin.math.round(y / gridSize) * gridSize) else y
         viewModelScope.launch {
+            val siblingsCount = allProjectNodes.value.count { it.parentNodeId == currentParentNodeId }
             val node = CanvasNodeEntity(
                 projectId = pid,
                 parentNodeId = currentParentNodeId,
@@ -280,7 +316,8 @@ class StoryViewModel(application: Application) : AndroidViewModel(application) {
                 markerIcon = markerIcon,
                 tags = tags,
                 xPos = finalX,
-                yPos = finalY
+                yPos = finalY,
+                orderIndex = siblingsCount
             )
             repository.insertNode(node)
             SoundEffectManager.playAddNode()
@@ -290,7 +327,7 @@ class StoryViewModel(application: Application) : AndroidViewModel(application) {
     val optimisticNodePositions = mutableStateMapOf<Long, Offset>()
 
     fun updateNodePosition(nodeId: Long, x: Float, y: Float) {
-        val currentNodes = nodes.value
+        val currentNodes = allProjectNodes.value
         val node = currentNodes.find { it.id == nodeId } ?: return
         val finalX = if (isSnapToGrid) (kotlin.math.round(x / gridSize) * gridSize) else x
         val finalY = if (isSnapToGrid) (kotlin.math.round(y / gridSize) * gridSize) else y
@@ -298,7 +335,37 @@ class StoryViewModel(application: Application) : AndroidViewModel(application) {
         optimisticNodePositions[nodeId] = Offset(finalX, finalY)
 
         viewModelScope.launch {
-            repository.updateNode(node.copy(xPos = finalX, yPos = finalY))
+            val updatedNode = node.copy(xPos = finalX, yPos = finalY)
+            
+            // Recalculate sibling order based on visual layout axis
+            val siblings = currentNodes.filter { it.parentNodeId == node.parentNodeId }.toMutableList()
+            val nodeIndex = siblings.indexOfFirst { it.id == node.id }
+            if (nodeIndex != -1) {
+                siblings[nodeIndex] = updatedNode
+            } else {
+                siblings.add(updatedNode)
+            }
+            
+            if (siblings.size > 1) {
+                val xs = siblings.map { it.xPos }
+                val ys = siblings.map { it.yPos }
+                val dx = (xs.maxOrNull() ?: 0f) - (xs.minOrNull() ?: 0f)
+                val dy = (ys.maxOrNull() ?: 0f) - (ys.minOrNull() ?: 0f)
+                
+                val sortedSiblings = if (dy > dx) {
+                    siblings.sortedBy { it.yPos }
+                } else {
+                    siblings.sortedBy { it.xPos }
+                }
+                
+                for ((index, sibling) in sortedSiblings.withIndex()) {
+                    if (sibling.orderIndex != index) {
+                        repository.updateNode(sibling.copy(orderIndex = index))
+                    }
+                }
+            } else {
+                repository.updateNode(updatedNode)
+            }
         }
     }
 

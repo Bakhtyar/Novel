@@ -200,23 +200,11 @@ fun NodeDetailModal(
 
             // Color Picker
             Text(text = Strings.get("color", lang), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                for (hex in colorsList) {
-                    val c = Color(android.graphics.Color.parseColor(hex))
-                    Box(
-                        modifier = Modifier
-                            .size(36.dp)
-                            .clip(CircleShape)
-                            .background(c)
-                            .clickable { colorHex = hex },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        if (colorHex == hex) {
-                            Box(modifier = Modifier.size(12.dp).clip(CircleShape).background(Color.White))
-                        }
-                    }
-                }
-            }
+            com.example.ui.components.HsvColorPicker(
+                colorHex = colorHex,
+                onColorChanged = { colorHex = it },
+                modifier = Modifier.fillMaxWidth()
+            )
 
             // Progress Slider
             Row(

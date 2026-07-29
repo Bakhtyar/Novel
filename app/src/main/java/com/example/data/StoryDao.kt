@@ -22,8 +22,11 @@ interface StoryDao {
     @Delete
     suspend fun deleteProject(project: StoryProjectEntity)
 
-    @Query("SELECT * FROM canvas_nodes WHERE projectId = :projectId AND parentNodeId = :parentNodeId")
+    @Query("SELECT * FROM canvas_nodes WHERE projectId = :projectId AND parentNodeId = :parentNodeId ORDER BY orderIndex ASC, id ASC")
     fun getNodesForProject(projectId: Long, parentNodeId: Long = 0L): Flow<List<CanvasNodeEntity>>
+
+    @Query("SELECT * FROM canvas_nodes WHERE projectId = :projectId ORDER BY orderIndex ASC, id ASC")
+    fun getAllNodesForProject(projectId: Long): Flow<List<CanvasNodeEntity>>
 
     @Query("SELECT * FROM canvas_nodes WHERE projectId = :projectId")
     suspend fun getAllNodesForProjectSync(projectId: Long): List<CanvasNodeEntity>
