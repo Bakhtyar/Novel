@@ -5,20 +5,23 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountTree
-import androidx.compose.material.icons.filled.Lightbulb
-import androidx.compose.material.icons.filled.MenuBook
+import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.material.icons.filled.Comment
+import androidx.compose.material.icons.filled.Notes
 import androidx.compose.material.icons.filled.Topic
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ui.localization.Strings
@@ -36,8 +39,10 @@ fun ToolboxDock(
     val tools = listOf(
         "Main Topic" to Icons.Default.Topic,
         "Subtopic" to Icons.Default.AccountTree,
-        "Chapter" to Icons.Default.MenuBook,
-        "Idea" to Icons.Default.Lightbulb
+        "Parent Topic" to Icons.Default.ArrowUpward,
+        "Floating" to Icons.Default.Cloud,
+        "Callout" to Icons.Default.Comment,
+        "Summary" to Icons.Default.Notes
     )
 
     Box(modifier = modifier) {
@@ -61,11 +66,11 @@ fun ToolboxDock(
                             .onGloballyPositioned { coords ->
                                 itemRootPos = coords.positionInRoot()
                             }
-                            .pointerInput(Unit) {
+                            .pointerInput(type) {
                                 detectDragGestures(
-                                    onDragStart = { _ ->
+                                    onDragStart = { touchOffset ->
                                         draggedTool = type
-                                        dragPosition = itemRootPos
+                                        dragPosition = itemRootPos + touchOffset
                                     },
                                     onDrag = { change, dragAmount ->
                                         change.consume()
@@ -112,28 +117,35 @@ fun ToolboxDock(
         }
     }
     
-    // Render the dragged item overlay (globally)
+    // Render the dragged item overlay (globally) with LTR absolute coordinates
     if (draggedTool != null) {
         val icon = tools.find { it.first == draggedTool }?.second ?: Icons.Default.Topic
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-        ) {
-            Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier
-                    .offset { IntOffset(dragPosition.x.roundToInt(), dragPosition.y.roundToInt()) }
-                    .size(48.dp)
+        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+            Box(
+                modifier = Modifier.fillMaxSize()
             ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onPrimary,
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.primary,
+                    shadowElevation = 8.dp,
                     modifier = Modifier
-                        .padding(12.dp)
-                        .fillMaxSize()
-                )
+                        .absoluteOffset {
+                            IntOffset(
+                                (dragPosition.x - 24.dp.toPx()).roundToInt(),
+                                (dragPosition.y - 24.dp.toPx()).roundToInt()
+                            )
+                        }
+                        .size(48.dp)
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier
+                            .padding(12.dp)
+                            .fillMaxSize()
+                    )
+                }
             }
         }
     }

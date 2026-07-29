@@ -43,10 +43,15 @@ fun NodeDetailModal(
     var isCompleted by remember { mutableStateOf(node.isCompleted) }
     var dateLabel by remember { mutableStateOf(node.dateLabel) }
     var boundaryGroup by remember { mutableStateOf(node.boundaryGroup) }
+    var linkUrl by remember { mutableStateOf(node.linkUrl) }
+    var shape by remember { mutableStateOf(node.shape) }
+    var priority by remember { mutableIntStateOf(node.priority) }
+    var commentText by remember { mutableStateOf(node.commentText) }
     var showSketch by remember { mutableStateOf(false) }
 
     val colorsList = listOf("#3B82F6", "#10B981", "#8B5CF6", "#EF4444", "#F59E0B", "#EC4899", "#14B8A6", "#6366F1")
-    val nodeTypes = listOf("Main Topic", "Subtopic", "Character", "Chapter", "Event", "Kingdom", "Ability", "Secret", "Timeline", "Idea")
+    val nodeTypes = listOf("Main Topic", "Subtopic", "Parent Topic", "Floating", "Callout", "Summary", "Character", "Chapter", "Event", "Kingdom", "Ability", "Secret", "Timeline", "Idea")
+    val shapeOptions = listOf("ROUNDED_RECT", "PILL", "CAPSULE", "DIAMOND", "OVAL", "CALLOUT", "SUMMARY")
     val iconsList = listOf("star", "person", "kingdom", "book", "flag", "secret", "lightning", "check")
 
     ModalBottomSheet(
@@ -62,7 +67,11 @@ fun NodeDetailModal(
                     progress = progress.toInt(),
                     isCompleted = isCompleted,
                     dateLabel = dateLabel,
-                    boundaryGroup = boundaryGroup
+                    boundaryGroup = boundaryGroup,
+                    linkUrl = linkUrl,
+                    shape = shape,
+                    priority = priority,
+                    commentText = commentText
                 )
             )
             onDismiss()
@@ -239,6 +248,45 @@ fun NodeDetailModal(
                 )
             }
 
+            // Priority Chips (0..5)
+            Text("Priority (P1 - P5)", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                (0..5).forEach { p ->
+                    FilterChip(
+                        selected = priority == p,
+                        onClick = { priority = p; SoundEffectManager.playClick() },
+                        label = { Text(if (p == 0) "None" else "P$p") }
+                    )
+                }
+            }
+
+            // Shape Selector
+            Text("Node Shape", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf("ROUNDED_RECT", "PILL", "OVAL", "CALLOUT").forEach { shp ->
+                    FilterChip(
+                        selected = shape == shp,
+                        onClick = { shape = shp; SoundEffectManager.playClick() },
+                        label = { Text(shp) }
+                    )
+                }
+            }
+
+            OutlinedTextField(
+                value = linkUrl,
+                onValueChange = { linkUrl = it },
+                label = { Text("Hyperlink / URL") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true
+            )
+
+            OutlinedTextField(
+                value = commentText,
+                onValueChange = { commentText = it },
+                label = { Text("Comments / Discussion Notes") },
+                modifier = Modifier.fillMaxWidth().height(80.dp)
+            )
+
             OutlinedTextField(
                 value = tags,
                 onValueChange = { tags = it },
@@ -289,7 +337,11 @@ fun NodeDetailModal(
                             progress = progress.toInt(),
                             isCompleted = isCompleted,
                             dateLabel = dateLabel,
-                            boundaryGroup = boundaryGroup
+                            boundaryGroup = boundaryGroup,
+                            linkUrl = linkUrl,
+                            shape = shape,
+                            priority = priority,
+                            commentText = commentText
                         )
                     )
                     onDismiss()

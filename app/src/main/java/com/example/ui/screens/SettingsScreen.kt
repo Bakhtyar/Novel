@@ -204,47 +204,6 @@ fun SettingsScreen(
                     }
                 }
             }
-
-            // Lightning Effect Customization Card
-            Card(
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(modifier = Modifier.padding(20.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            Icon(Icons.Default.FlashOn, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                            Text(
-                                text = "Lightning Effect",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                        Switch(
-                            checked = viewModel.isLightningEffectEnabled,
-                            onCheckedChange = { viewModel.isLightningEffectEnabled = it }
-                        )
-                    }
-                    if (viewModel.isLightningEffectEnabled) {
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text("Lightning Color", style = MaterialTheme.typography.bodyMedium)
-                        Spacer(modifier = Modifier.height(8.dp))
-                        com.example.ui.components.HsvColorPicker(
-                            colorHex = viewModel.lightningColorHex,
-                            onColorChanged = { viewModel.lightningColorHex = it },
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                }
-            }
             
             // Node Numbering Card
             Card(
@@ -317,7 +276,7 @@ fun SettingsScreen(
                                     )
                                     .clickable {
                                         SoundEffectManager.playClick()
-                                        viewModel.ambientGlowColorHex = hex
+                                        viewModel.updateAmbientGlowColor(hex)
                                     }
                             )
                         }
@@ -358,7 +317,7 @@ fun SettingsScreen(
                             checked = viewModel.isSnapToGrid,
                             onCheckedChange = {
                                 SoundEffectManager.playClick()
-                                viewModel.isSnapToGrid = it
+                                viewModel.updateSnapToGrid(it)
                             }
                         )
                     }
@@ -374,7 +333,7 @@ fun SettingsScreen(
                             checked = viewModel.isGridVisible,
                             onCheckedChange = {
                                 SoundEffectManager.playClick()
-                                viewModel.isGridVisible = it
+                                viewModel.updateGridVisible(it)
                             }
                         )
                     }

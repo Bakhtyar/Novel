@@ -34,7 +34,6 @@ import androidx.compose.ui.unit.LayoutDirection
 import com.example.audio.SoundEffectManager
 import com.example.data.CanvasNodeEntity
 import com.example.ui.components.AmbientGlowBackground
-import com.example.ui.components.MusicPlayerSheet
 import com.example.ui.localization.Strings
 import com.example.ui.viewmodel.StoryViewModel
 
@@ -170,10 +169,45 @@ fun CanvasScreen(
                                 }
                             )
                             DropdownMenuItem(
+                                text = { Text(Strings.get("logic_chart", lang)) },
+                                onClick = {
+                                    showStructureMenu = false
+                                    viewModel.arrangeStructure("LOGIC")
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text(Strings.get("org_chart", lang)) },
+                                onClick = {
+                                    showStructureMenu = false
+                                    viewModel.arrangeStructure("ORG")
+                                }
+                            )
+                            DropdownMenuItem(
                                 text = { Text(Strings.get("timeline_sequence", lang)) },
                                 onClick = {
                                     showStructureMenu = false
                                     viewModel.arrangeStructure("TIMELINE")
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text(Strings.get("fishbone", lang)) },
+                                onClick = {
+                                    showStructureMenu = false
+                                    viewModel.arrangeStructure("FISHBONE")
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text(Strings.get("matrix", lang)) },
+                                onClick = {
+                                    showStructureMenu = false
+                                    viewModel.arrangeStructure("MATRIX")
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text(Strings.get("tree_table", lang)) },
+                                onClick = {
+                                    showStructureMenu = false
+                                    viewModel.arrangeStructure("TREE_TABLE")
                                 }
                             )
                         }
@@ -185,18 +219,6 @@ fun CanvasScreen(
                         showExportDialog = true
                     }) {
                         Icon(Icons.Default.Share, contentDescription = Strings.get("export_markdown", lang))
-                    }
-
-                    // Music Player Icon Button
-                    IconButton(onClick = {
-                        SoundEffectManager.playClick()
-                        viewModel.isMusicPlayerOpen = true
-                    }) {
-                        Icon(
-                            imageVector = Icons.Default.MusicNote,
-                            contentDescription = Strings.get("music_player", lang),
-                            tint = if (viewModel.audioPlayerManager.isPlaying) MaterialTheme.colorScheme.primary else LocalContentColor.current
-                        )
                     }
 
                     // Minimap
@@ -224,13 +246,6 @@ fun CanvasScreen(
             AmbientGlowBackground(
                 glowColorHex = viewModel.ambientGlowColorHex,
                 isDarkMode = viewModel.isDarkMode,
-                modifier = Modifier.fillMaxSize()
-            )
-
-            // Cinematic Lightning Effect
-            com.example.ui.components.CinematicLightningEffect(
-                isEnabled = viewModel.isLightningEffectEnabled,
-                colorHex = viewModel.lightningColorHex,
                 modifier = Modifier.fillMaxSize()
             )
 
@@ -281,6 +296,7 @@ fun CanvasScreen(
                             translationY = offsetY
                             scaleX = zoomScale
                             scaleY = zoomScale
+                            transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 0f)
                         }
                 ) {
                     // Draw Node Connections
@@ -375,7 +391,8 @@ fun CanvasScreen(
                                     }
                                 },
                                 onDragEnd = { dx, dy ->
-                                    viewModel.updateNodePosition(node.id, displayNode.xPos + dx, displayNode.yPos + dy)
+                                    val finalOffset = draggingOffsets[node.id] ?: Offset(dx, dy)
+                                    viewModel.updateNodePosition(node.id, displayNode.xPos + finalOffset.x, displayNode.yPos + finalOffset.y)
                                     draggingOffsets.remove(node.id)
                                 },
                                 onClick = {
@@ -501,15 +518,33 @@ fun CanvasScreen(
             com.example.ui.components.ToolboxDock(
                 lang = lang,
                 onToolDropped = { type, screenPosition ->
-                    SoundEffectManager.playClick()
-                    val density = density.density
+                    SoundEffectManager.playAddNode()
+                    val densityVal = density.density
+                    val canvasX = (screenPosition.x - offsetX) / (zoomScale * densityVal)
+                    val canvasY = (screenPosition.y - offsetY) / (zoomScale * densityVal)
                     
-                    val canvasX = (screenPosition.x - offsetX) / zoomScale / density
-                    val canvasY = (screenPosition.y - offsetY) / zoomScale / density
+                    val defaultTitle = when(type) {
+                        "Main Topic" -> Strings.get("main_topic", lang)
+                        "Subtopic" -> Strings.get("subtopic", lang)
+                        "Chapter" -> Strings.get("chapter", lang)
+                        "Idea" -> Strings.get("idea", lang)
+                        else -> type
+                    }
+                    val defaultColor = when(type) {
+                        "Main Topic" -> "#3B82F6"
+                        "Chapter" -> "#8B5CF6"
+                        "Idea" -> "#F59E0B"
+                        else -> "#10B981"
+                    }
                     
-                    newNodeType = type
-                    newNodePosition = Offset(canvasX, canvasY)
-                    showAddDialog = true
+                    viewModel.addNode(
+                        title = defaultTitle,
+                        content = "",
+                        nodeType = type,
+                        colorHex = defaultColor,
+                        x = canvasX,
+                        y = canvasY
+                    )
                 },
                 modifier = Modifier
                     .fillMaxSize()
@@ -624,15 +659,6 @@ fun CanvasScreen(
         )
     }
 
-    // Music Player Bottom Sheet
-    if (viewModel.isMusicPlayerOpen) {
-        MusicPlayerSheet(
-            audioManager = viewModel.audioPlayerManager,
-            lang = lang,
-            onDismiss = { viewModel.isMusicPlayerOpen = false }
-        )
-    }
-
     // Node Detail Modal
     viewModel.selectedNodeForDetail?.let { selectedNode ->
         NodeDetailModal(
@@ -697,7 +723,7 @@ fun SmartStoryNodeCard(
 
     Box(
         modifier = Modifier
-            .offset(x = (node.xPos + dragOffset.x).dp, y = (node.yPos + dragOffset.y).dp)
+            .absoluteOffset(x = (node.xPos + dragOffset.x).dp, y = (node.yPos + dragOffset.y).dp)
     ) {
         // Quick add handles (only visible when selected)
         if (isSelected) {
@@ -750,15 +776,19 @@ fun SmartStoryNodeCard(
                     var currentDragOffset = Offset.Zero
                     detectDragGestures(
                         onDragStart = {
-                            currentDragOffset = dragOffset
+                            currentDragOffset = Offset.Zero
                         },
                         onDragEnd = {
                             onDragEnd(currentDragOffset.x, currentDragOffset.y)
                         },
+                        onDragCancel = {
+                            onDragEnd(currentDragOffset.x, currentDragOffset.y)
+                        },
                         onDrag = { change, dragAmount ->
                             change.consume()
-                            val dx = dragAmount.x / currentDensity
-                            val dy = dragAmount.y / currentDensity
+                            val scale = if (zoomScale > 0f) zoomScale else 1f
+                            val dx = dragAmount.x / (currentDensity * scale)
+                            val dy = dragAmount.y / (currentDensity * scale)
                             currentDragOffset = Offset(currentDragOffset.x + dx, currentDragOffset.y + dy)
                             onDragUpdate(currentDragOffset)
                         }

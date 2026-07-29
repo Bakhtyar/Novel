@@ -11,7 +11,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MenuBook
-import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
@@ -25,7 +24,6 @@ import androidx.compose.ui.unit.dp
 import com.example.audio.SoundEffectManager
 import com.example.data.StoryProjectEntity
 import com.example.ui.components.AmbientGlowBackground
-import com.example.ui.components.MusicPlayerSheet
 import com.example.ui.localization.Strings
 import com.example.ui.viewmodel.StoryViewModel
 
@@ -42,9 +40,10 @@ fun HomeScreen(
     var newProjectDesc by remember { mutableStateOf("") }
     var selectedPreset by remember { mutableStateOf("MANGA_WORLDBUILDING") }
 
-    // Seed default sample project if none exists
+    // Seed default sample project ONLY ONCE on clean install if none exists
     LaunchedEffect(projects, lang) {
-        if (projects.isEmpty()) {
+        if (projects.isEmpty() && !viewModel.hasSeededInitialProject) {
+            viewModel.hasSeededInitialProject = true
             viewModel.createProject(
                 title = Strings.get("sample_project_title", lang),
                 description = Strings.get("sample_project_desc", lang),
@@ -77,17 +76,6 @@ fun HomeScreen(
                     }
                 },
                 actions = {
-                    // Music Player Button
-                    IconButton(onClick = {
-                        SoundEffectManager.playClick()
-                        viewModel.isMusicPlayerOpen = true
-                    }) {
-                        Icon(
-                            imageVector = Icons.Default.MusicNote,
-                            contentDescription = Strings.get("music_player", lang),
-                            tint = if (viewModel.audioPlayerManager.isPlaying) MaterialTheme.colorScheme.primary else LocalContentColor.current
-                        )
-                    }
                     // Settings Button
                     IconButton(
                         onClick = {
@@ -319,15 +307,6 @@ fun HomeScreen(
                     Text(Strings.get("cancel", lang))
                 }
             }
-        )
-    }
-
-    // Music Player Sheet
-    if (viewModel.isMusicPlayerOpen) {
-        MusicPlayerSheet(
-            audioManager = viewModel.audioPlayerManager,
-            lang = lang,
-            onDismiss = { viewModel.isMusicPlayerOpen = false }
         )
     }
 }
