@@ -4,6 +4,8 @@ import android.app.Application
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.ui.geometry.Offset
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.audio.AudioPlayerManager
@@ -285,11 +287,16 @@ class StoryViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    val optimisticNodePositions = mutableStateMapOf<Long, Offset>()
+
     fun updateNodePosition(nodeId: Long, x: Float, y: Float) {
         val currentNodes = nodes.value
         val node = currentNodes.find { it.id == nodeId } ?: return
         val finalX = if (isSnapToGrid) (kotlin.math.round(x / gridSize) * gridSize) else x
         val finalY = if (isSnapToGrid) (kotlin.math.round(y / gridSize) * gridSize) else y
+        
+        optimisticNodePositions[nodeId] = Offset(finalX, finalY)
+
         viewModelScope.launch {
             repository.updateNode(node.copy(xPos = finalX, yPos = finalY))
         }

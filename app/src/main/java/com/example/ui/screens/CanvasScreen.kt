@@ -318,13 +318,16 @@ fun CanvasScreen(
                             val fromNode = nodeMap[conn.fromNodeId]
                             val toNode = nodeMap[conn.toNodeId]
                             if (fromNode != null && toNode != null) {
+                                val fromOpt = viewModel.optimisticNodePositions[fromNode.id]
+                                val toOpt = viewModel.optimisticNodePositions[toNode.id]
+                                
                                 val fromDrag = draggingOffsets[fromNode.id] ?: Offset.Zero
                                 val toDrag = draggingOffsets[toNode.id] ?: Offset.Zero
                                 
-                                val fX = fromNode.xPos + fromDrag.x
-                                val fY = fromNode.yPos + fromDrag.y
-                                val tX = toNode.xPos + toDrag.x
-                                val tY = toNode.yPos + toDrag.y
+                                val fX = (fromOpt?.x ?: fromNode.xPos) + fromDrag.x
+                                val fY = (fromOpt?.y ?: fromNode.yPos) + fromDrag.y
+                                val tX = (toOpt?.x ?: toNode.xPos) + toDrag.x
+                                val tY = (toOpt?.y ?: toNode.yPos) + toDrag.y
 
                                 val fXPx = fX.dp.toPx()
                                 val fYPx = fY.dp.toPx()
@@ -363,8 +366,11 @@ fun CanvasScreen(
                     for (node in filteredNodes) {
                         if (!node.isCollapsed) {
                             val isSelected = viewModel.selectedNodeForDetail?.id == node.id
+                            val optPos = viewModel.optimisticNodePositions[node.id]
+                            val displayNode = if (optPos != null) node.copy(xPos = optPos.x, yPos = optPos.y) else node
+
                             SmartStoryNodeCard(
-                                node = node,
+                                node = displayNode,
                                 lang = lang,
                                 zoomScale = zoomScale,
                                 dragOffset = draggingOffsets[node.id] ?: Offset.Zero,
@@ -372,7 +378,7 @@ fun CanvasScreen(
                                     draggingOffsets[node.id] = offset
                                 },
                                 onDragEnd = { dx, dy ->
-                                    viewModel.updateNodePosition(node.id, node.xPos + dx, node.yPos + dy)
+                                    viewModel.updateNodePosition(node.id, displayNode.xPos + dx, displayNode.yPos + dy)
                                     draggingOffsets.remove(node.id)
                                 },
                                 onClick = {
