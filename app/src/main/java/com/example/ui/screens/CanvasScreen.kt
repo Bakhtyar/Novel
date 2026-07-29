@@ -285,8 +285,12 @@ fun CanvasScreen(
                 ) {
                     // Draw Node Connections
                     Canvas(modifier = Modifier.fillMaxSize()) {
+                        val currentNodeIds = nodes.map { it.id }.toSet()
                         val nodeMap = allProjectNodes.associateBy { it.id }
                         for (conn in connections) {
+                            if (!currentNodeIds.contains(conn.fromNodeId) || !currentNodeIds.contains(conn.toNodeId)) {
+                                continue
+                            }
                             val fromNode = nodeMap[conn.fromNodeId]
                             val toNode = nodeMap[conn.toNodeId]
                             if (fromNode != null && toNode != null) {
@@ -305,20 +309,31 @@ fun CanvasScreen(
                                 val fYPx = fY.dp.toPx()
                                 val tXPx = tX.dp.toPx()
                                 val tYPx = tY.dp.toPx()
-                                val widthPx = 230.dp.toPx()
+                                val fromWidthPx = when (fromNode.nodeType) {
+                                    "Main Topic" -> 260.dp.toPx()
+                                    "Idea" -> 160.dp.toPx()
+                                    else -> 230.dp.toPx()
+                                }
+                                val toWidthPx = when (toNode.nodeType) {
+                                    "Main Topic" -> 260.dp.toPx()
+                                    "Idea" -> 160.dp.toPx()
+                                    else -> 230.dp.toPx()
+                                }
                                 val heightPx = 60.dp.toPx()
 
-                                val startX = if (tX > fX) fXPx + widthPx else fXPx
-                                val startY = fYPx + heightPx
-                                val endX = if (tX > fX) tXPx else tXPx + widthPx
-                                val endY = tYPx + heightPx
+                                val startX = fXPx + (fromWidthPx / 2)
+                                val startY = fYPx + (heightPx / 2)
+                                val endX = tXPx + (toWidthPx / 2)
+                                val endY = tYPx + (heightPx / 2)
 
-                                val controlX1 = startX + (endX - startX) / 2
-                                val controlX2 = startX + (endX - startX) / 2
+                                val controlX1 = startX
+                                val controlY1 = startY + (endY - startY) / 2
+                                val controlX2 = endX
+                                val controlY2 = startY + (endY - startY) / 2
 
                                 val path = androidx.compose.ui.graphics.Path().apply {
                                     moveTo(startX, startY)
-                                    cubicTo(controlX1, startY, controlX2, endY, endX, endY)
+                                    cubicTo(controlX1, controlY1, controlX2, controlY2, endX, endY)
                                 }
 
                                 drawPath(
@@ -349,7 +364,15 @@ fun CanvasScreen(
                                 isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl,
                                 dragOffset = draggingOffsets[node.id] ?: Offset.Zero,
                                 onDragUpdate = { offset ->
-                                    draggingOffsets[node.id] = offset
+                                    if (viewModel.isSnapToGrid) {
+                                        val rawX = displayNode.xPos + offset.x
+                                        val rawY = displayNode.yPos + offset.y
+                                        val snapX = kotlin.math.round(rawX / viewModel.gridSize) * viewModel.gridSize
+                                        val snapY = kotlin.math.round(rawY / viewModel.gridSize) * viewModel.gridSize
+                                        draggingOffsets[node.id] = Offset(snapX - displayNode.xPos, snapY - displayNode.yPos)
+                                    } else {
+                                        draggingOffsets[node.id] = offset
+                                    }
                                 },
                                 onDragEnd = { dx, dy ->
                                     viewModel.updateNodePosition(node.id, displayNode.xPos + dx, displayNode.yPos + dy)
@@ -659,6 +682,19 @@ fun SmartStoryNodeCard(
         MaterialTheme.colorScheme.primary
     }
 
+    val shape = when (node.nodeType) {
+        "Main Topic" -> RoundedCornerShape(24.dp) // Rounder
+        "Chapter" -> RoundedCornerShape(4.dp) // Squarish
+        "Idea" -> CircleShape // Very round
+        else -> RoundedCornerShape(12.dp) // Default Subtopic
+    }
+
+    val width = when (node.nodeType) {
+        "Main Topic" -> 260.dp
+        "Idea" -> 160.dp
+        else -> 230.dp
+    }
+
     Box(
         modifier = Modifier
             .offset(x = (node.xPos + dragOffset.x).dp, y = (node.yPos + dragOffset.y).dp)
@@ -667,7 +703,7 @@ fun SmartStoryNodeCard(
         if (isSelected) {
             Box(
                 modifier = Modifier
-                    .offset(x = 240.dp, y = 40.dp)
+                    .offset(x = width + 10.dp, y = 40.dp)
                     .size(40.dp)
                     .clip(CircleShape)
                     .background(MaterialTheme.colorScheme.primary)
@@ -689,7 +725,7 @@ fun SmartStoryNodeCard(
             }
             Box(
                 modifier = Modifier
-                    .offset(x = 95.dp, y = 130.dp)
+                    .offset(x = (width/2) - 20.dp, y = 130.dp)
                     .size(40.dp)
                     .clip(CircleShape)
                     .background(MaterialTheme.colorScheme.primary)
@@ -702,15 +738,15 @@ fun SmartStoryNodeCard(
 
         Card(
             onClick = onClick,
-            shape = RoundedCornerShape(18.dp),
+            shape = shape,
             colors = CardDefaults.cardColors(
                 containerColor = if (isConnecting) MaterialTheme.colorScheme.tertiaryContainer else cardColor.copy(alpha = 0.95f)
             ),
             elevation = CardDefaults.cardElevation(defaultElevation = if (isSelected) 16.dp else 8.dp),
             modifier = Modifier
-                .width(230.dp)
+                .width(width)
                 .pointerInput(node.id, zoomScale) {
-                    val density = density
+                    val currentDensity = density
                     var currentDragOffset = Offset.Zero
                     detectDragGestures(
                         onDragStart = {
@@ -721,8 +757,8 @@ fun SmartStoryNodeCard(
                         },
                         onDrag = { change, dragAmount ->
                             change.consume()
-                            val dx = (dragAmount.x / zoomScale) / density
-                            val dy = (dragAmount.y / zoomScale) / density
+                            val dx = dragAmount.x / currentDensity
+                            val dy = dragAmount.y / currentDensity
                             currentDragOffset = Offset(currentDragOffset.x + dx, currentDragOffset.y + dy)
                             onDragUpdate(currentDragOffset)
                         }

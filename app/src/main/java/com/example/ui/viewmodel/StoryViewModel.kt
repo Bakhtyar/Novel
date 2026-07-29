@@ -33,7 +33,7 @@ class StoryViewModel(application: Application) : AndroidViewModel(application) {
 
     // Tilemap & Grid settings
     var isGridVisible by mutableStateOf(true)
-    var isSnapToGrid by mutableStateOf(true)
+    var isSnapToGrid by mutableStateOf(false)
     var gridSize by mutableStateOf(40f)
 
     // Ambient Glow settings
