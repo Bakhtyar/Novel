@@ -5,15 +5,17 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 
-@Database(entities = [StoryProjectEntity::class, CanvasNodeEntity::class, NodeConnectionEntity::class], version = 1, exportSchema = false)
+@Database(
+    entities = [StoryProjectEntity::class, CanvasNodeEntity::class, NodeConnectionEntity::class],
+    version = 2,
+    exportSchema = false
+)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun storyDao(): StoryDao
 
     companion object {
         @Volatile
-        private var INSTANCE: AppDatabase? = nil()
-
-        private fun nil(): AppDatabase? = null
+        private var INSTANCE: AppDatabase? = null
 
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
@@ -21,7 +23,9 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     "story_canvas_database"
-                ).build()
+                )
+                    .fallbackToDestructiveMigration()
+                    .build()
                 INSTANCE = instance
                 instance
             }

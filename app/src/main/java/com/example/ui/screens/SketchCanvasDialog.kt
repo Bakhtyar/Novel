@@ -72,7 +72,7 @@ fun SketchCanvasDialog(
                     }
                     if (points.isEmpty()) {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Text("Draw your sketch here...", color = Color.LightGray)
+                            Text(Strings.get("draw_sketch_here", lang), color = Color.LightGray)
                         }
                     }
                 }
@@ -89,7 +89,7 @@ fun SketchCanvasDialog(
         dismissButton = {
             Row {
                 TextButton(onClick = { points.clear() }) {
-                    Text("Clear")
+                    Text(Strings.get("clear", lang))
                 }
                 TextButton(onClick = onDismiss) {
                     Text(Strings.get("cancel", lang))

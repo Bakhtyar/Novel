@@ -1,19 +1,26 @@
 package com.example.ui.screens
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.DarkMode
-import androidx.compose.material.icons.filled.Language
-import androidx.compose.material.icons.filled.WbSunny
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.example.audio.SoundEffectManager
 import com.example.ui.localization.Strings
 import com.example.ui.viewmodel.StoryViewModel
 
@@ -26,12 +33,27 @@ fun SettingsScreen(
     val lang = viewModel.language
     val isDark = viewModel.isDarkMode
 
+    val glowColorPresets = listOf(
+        "#8B5CF6" to "Violet",
+        "#10B981" to "Emerald",
+        "#EC4899" to "Rose",
+        "#06B6D4" to "Cyan",
+        "#F59E0B" to "Amber",
+        "#3B82F6" to "Blue"
+    )
+
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text(Strings.get("settings", lang), fontWeight = FontWeight.Bold) },
                 navigationIcon = {
-                    IconButton(onClick = onBack, modifier = Modifier.testTag("settings_back_button")) {
+                    IconButton(
+                        onClick = {
+                            SoundEffectManager.playClick()
+                            onBack()
+                        },
+                        modifier = Modifier.testTag("settings_back_button")
+                    ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = Strings.get("back", lang)
@@ -49,6 +71,7 @@ fun SettingsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
+                .verticalScroll(rememberScrollState())
                 .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
@@ -76,7 +99,10 @@ fun SettingsScreen(
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         Button(
-                            onClick = { viewModel.changeLanguage("en") },
+                            onClick = {
+                                SoundEffectManager.playClick()
+                                viewModel.changeLanguage("en")
+                            },
                             modifier = Modifier
                                 .weight(1f)
                                 .testTag("lang_en_button"),
@@ -90,7 +116,10 @@ fun SettingsScreen(
                             )
                         }
                         Button(
-                            onClick = { viewModel.changeLanguage("ar") },
+                            onClick = {
+                                SoundEffectManager.playClick()
+                                viewModel.changeLanguage("ar")
+                            },
                             modifier = Modifier
                                 .weight(1f)
                                 .testTag("lang_ar_button"),
@@ -135,7 +164,10 @@ fun SettingsScreen(
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         Button(
-                            onClick = { if (isDark) viewModel.toggleDarkMode() },
+                            onClick = {
+                                SoundEffectManager.playClick()
+                                if (isDark) viewModel.toggleDarkMode()
+                            },
                             modifier = Modifier
                                 .weight(1f)
                                 .testTag("light_mode_button"),
@@ -151,7 +183,10 @@ fun SettingsScreen(
                             )
                         }
                         Button(
-                            onClick = { if (!isDark) viewModel.toggleDarkMode() },
+                            onClick = {
+                                SoundEffectManager.playClick()
+                                if (!isDark) viewModel.toggleDarkMode()
+                            },
                             modifier = Modifier
                                 .weight(1f)
                                 .testTag("dark_mode_button"),
@@ -166,6 +201,125 @@ fun SettingsScreen(
                                 color = if (isDark) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
                             )
                         }
+                    }
+                }
+            }
+
+            // Ambient Glow Customization Card
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(20.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Text(
+                            text = Strings.get("ambient_glow_color", lang),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceAround,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        glowColorPresets.forEach { (hex, name) ->
+                            val color = try { Color(android.graphics.Color.parseColor(hex)) } catch (_: Exception) { Color.Magenta }
+                            val isSelected = viewModel.ambientGlowColorHex.equals(hex, ignoreCase = true)
+                            Box(
+                                modifier = Modifier
+                                    .size(42.dp)
+                                    .clip(CircleShape)
+                                    .background(color)
+                                    .border(
+                                        width = if (isSelected) 3.dp else 0.dp,
+                                        color = if (isSelected) MaterialTheme.colorScheme.onSurface else Color.Transparent,
+                                        shape = CircleShape
+                                    )
+                                    .clickable {
+                                        SoundEffectManager.playClick()
+                                        viewModel.ambientGlowColorHex = hex
+                                    }
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Tilemap Grid & SFX Settings Card
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Icon(Icons.Default.Grid4x4, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Text(
+                            text = Strings.get("tilemap_toolbar", lang),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    // Snap to Grid Switch
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(Strings.get("grid_snap", lang), style = MaterialTheme.typography.bodyMedium)
+                        Switch(
+                            checked = viewModel.isSnapToGrid,
+                            onCheckedChange = {
+                                SoundEffectManager.playClick()
+                                viewModel.isSnapToGrid = it
+                            }
+                        )
+                    }
+
+                    // Show Grid Switch
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(Strings.get("grid_visible", lang), style = MaterialTheme.typography.bodyMedium)
+                        Switch(
+                            checked = viewModel.isGridVisible,
+                            onCheckedChange = {
+                                SoundEffectManager.playClick()
+                                viewModel.isGridVisible = it
+                            }
+                        )
+                    }
+
+                    // SFX Switch
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(Strings.get("sfx_enabled", lang), style = MaterialTheme.typography.bodyMedium)
+                        Switch(
+                            checked = viewModel.isSfxEnabled,
+                            onCheckedChange = {
+                                viewModel.toggleSfx(it)
+                                SoundEffectManager.playClick()
+                            }
+                        )
                     }
                 }
             }

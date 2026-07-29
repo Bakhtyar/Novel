@@ -6,6 +6,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.audio.AudioPlayerManager
+import com.example.audio.SoundEffectManager
 import com.example.data.AppDatabase
 import com.example.data.CanvasNodeEntity
 import com.example.data.NodeConnectionEntity
@@ -22,19 +24,42 @@ import kotlinx.coroutines.launch
 class StoryViewModel(application: Application) : AndroidViewModel(application) {
     private val repository: StoryRepository
 
+    val audioPlayerManager = AudioPlayerManager(application)
+
     var language by mutableStateOf("en") // "en" or "ar"
     var isDarkMode by mutableStateOf(true) // Dark mode by default
+
+    // Tilemap & Grid settings
+    var isGridVisible by mutableStateOf(true)
+    var isSnapToGrid by mutableStateOf(true)
+    var gridSize by mutableStateOf(40f)
+
+    // Ambient Glow settings
+    var ambientGlowColorHex by mutableStateOf("#8B5CF6") // Default Deep Violet
+
+    // SFX setting
+    var isSfxEnabled by mutableStateOf(true)
+
+    fun toggleSfx(enabled: Boolean) {
+        isSfxEnabled = enabled
+        SoundEffectManager.isSfxEnabled = enabled
+    }
 
     var currentProjectId by mutableStateOf<Long?>(null)
     var currentParentNodeId by mutableStateOf<Long>(0L) // 0 for root canvas, >0 for nested sub-canvas
     var currentSubNodeTitle by mutableStateOf("")
 
     var selectedNodeForDetail by mutableStateOf<CanvasNodeEntity?>(null)
+    var selectedDocumentNode by mutableStateOf<CanvasNodeEntity?>(null) // Full Document Editor
+    var isPresentationMode by mutableStateOf(false)
+
     var isSketchModalOpen by mutableStateOf(false)
     var isMinimapOpen by mutableStateOf(false)
+    var isMusicPlayerOpen by mutableStateOf(false)
     var connectingSourceNodeId by mutableStateOf<Long?>(null)
 
     var searchQuery by mutableStateOf("")
+    var nodeFilterType by mutableStateOf("ALL") // "ALL", "Main Topic", "Character", "Chapter", "Kingdom", "Event"
 
     val projects: StateFlow<List<StoryProjectEntity>>
 
@@ -52,7 +77,7 @@ class StoryViewModel(application: Application) : AndroidViewModel(application) {
 
     val allProjectNodes: StateFlow<List<CanvasNodeEntity>> = _currentProjectIdFlow.flatMapLatest { pid ->
         if (pid == null) flowOf(emptyList())
-        else repository.getNodes(pid, 0L) // For minimap & connections across root
+        else repository.getNodes(pid, 0L)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val connections: StateFlow<List<NodeConnectionEntity>> = _currentProjectIdFlow.flatMapLatest { pid ->
@@ -64,11 +89,6 @@ class StoryViewModel(application: Application) : AndroidViewModel(application) {
         val dao = AppDatabase.getDatabase(application).storyDao()
         repository = StoryRepository(dao)
         projects = repository.allProjects.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-        // Seed sample project if database is empty
-        viewModelScope.launch {
-            // We can check if projects are empty and create sample project
-        }
     }
 
     fun changeLanguage(lang: String) {
@@ -101,31 +121,128 @@ class StoryViewModel(application: Application) : AndroidViewModel(application) {
     fun closeProject() {
         currentProjectId = null
         currentParentNodeId = 0L
+        selectedDocumentNode = null
+        isPresentationMode = false
         _currentProjectIdFlow.value = null
         _currentParentNodeIdFlow.value = 0L
     }
 
-    fun createProject(title: String, description: String, onCreated: (Long) -> Unit = {}) {
-        viewModelScope.launch {
-            val proj = StoryProjectEntity(title = title, description = description, isPinned = true)
-            val pid = repository.insertProject(proj)
-            // Seed sample nodes for new project
-            val n1 = CanvasNodeEntity(projectId = pid, title = "The Inciting Incident", content = "The protagonist discovers a mysterious glowing artifact in the ancient ruins.", nodeType = "Event", colorHex = "#3B82F6", xPos = 120f, yPos = 150f)
-            val n2 = CanvasNodeEntity(projectId = pid, title = "Hero: Elian", content = "A young cartographer with a hidden royal lineage and a thirst for adventure.", nodeType = "Character", colorHex = "#10B981", xPos = 450f, yPos = 150f)
-            val n3 = CanvasNodeEntity(projectId = pid, title = "Chapter 1: Whispers", content = "Elian packs his map bag and leaves the village before dawn.", nodeType = "Chapter", colorHex = "#8B5CF6", xPos = 120f, yPos = 400f)
-            val n4 = CanvasNodeEntity(projectId = pid, title = "The Climax & Conclusion", content = "The artifact is sealed, but the realm is forever altered.", nodeType = "Conclusion", colorHex = "#EF4444", xPos = 450f, yPos = 400f)
-            
-            val id1 = repository.insertNode(n1)
-            val id2 = repository.insertNode(n2)
-            val id3 = repository.insertNode(n3)
-            val id4 = repository.insertNode(n4)
+    fun openDocumentForNode(node: CanvasNodeEntity) {
+        selectedDocumentNode = node
+        SoundEffectManager.playOpenNote()
+    }
 
-            repository.insertConnection(NodeConnectionEntity(projectId = pid, fromNodeId = id1, toNodeId = id3, label = "Leads to"))
-            repository.insertConnection(NodeConnectionEntity(projectId = pid, fromNodeId = id2, toNodeId = id3, label = "Involves"))
-            repository.insertConnection(NodeConnectionEntity(projectId = pid, fromNodeId = id3, toNodeId = id4, label = "Progresses to"))
+    fun closeDocumentEditor() {
+        selectedDocumentNode = null
+        SoundEffectManager.playCloseNote()
+    }
+
+    fun toggleCollapseNode(node: CanvasNodeEntity) {
+        viewModelScope.launch {
+            repository.updateNode(node.copy(isCollapsed = !node.isCollapsed))
+            SoundEffectManager.playClick()
+        }
+    }
+
+    fun quickAddNode(sourceNode: CanvasNodeEntity, direction: String) {
+        val pid = currentProjectId ?: return
+        viewModelScope.launch {
+            val offset = when(direction) {
+                "RIGHT" -> Pair(300f, 0f)
+                "LEFT" -> Pair(-300f, 0f)
+                "BOTTOM" -> Pair(0f, 180f)
+                "TOP" -> Pair(0f, -180f)
+                else -> Pair(300f, 0f)
+            }
+            val newX = sourceNode.xPos + offset.first
+            val newY = sourceNode.yPos + offset.second
+            val newNode = CanvasNodeEntity(
+                projectId = pid,
+                parentNodeId = currentParentNodeId,
+                title = "New Node",
+                nodeType = "Subtopic",
+                colorHex = sourceNode.colorHex,
+                xPos = newX,
+                yPos = newY
+            )
+            val newId = repository.insertNode(newNode)
+            repository.insertConnection(NodeConnectionEntity(projectId = pid, fromNodeId = sourceNode.id, toNodeId = newId, label = "Child"))
+            SoundEffectManager.playAddNode()
+        }
+    }
+
+    fun createProject(title: String, description: String, templatePreset: String = "MANGA_WORLDBUILDING", onCreated: (Long) -> Unit = {}) {
+        viewModelScope.launch {
+            val proj = StoryProjectEntity(title = title, description = description, isPinned = true, templatePreset = templatePreset)
+            val pid = repository.insertProject(proj)
+
+            when (templatePreset) {
+                "MANGA_WORLDBUILDING" -> seedMangaWorldbuilding(pid)
+                "THREE_ACT" -> seedThreeActPlot(pid)
+                "CHARACTER_MATRIX" -> seedCharacterMatrix(pid)
+                "CHAPTER_TIMELINE" -> seedChapterTimeline(pid)
+                else -> seedMangaWorldbuilding(pid)
+            }
 
             onCreated(pid)
         }
+    }
+
+    private suspend fun seedMangaWorldbuilding(pid: Long) {
+        val root = CanvasNodeEntity(projectId = pid, title = "World: Astraea Realm", content = "Main Worldbuilding Hub", nodeType = "Main Topic", colorHex = "#8B5CF6", xPos = 400f, yPos = 100f, markerIcon = "kingdom", documentNote = "# Astraea Realm Codex\nWelcome to the official codex of Astraea.")
+        val rootId = repository.insertNode(root)
+
+        val k1 = CanvasNodeEntity(projectId = pid, title = "Solaris Empire", content = "Dominant sun-magic kingdom", nodeType = "Kingdom", colorHex = "#F59E0B", xPos = 100f, yPos = 300f, markerIcon = "kingdom")
+        val k2 = CanvasNodeEntity(projectId = pid, title = "Shadow Guild", content = "Underground rebellion", nodeType = "Kingdom", colorHex = "#EC4899", xPos = 700f, yPos = 300f, markerIcon = "secret")
+        val k1Id = repository.insertNode(k1)
+        val k2Id = repository.insertNode(k2)
+
+        val c1 = CanvasNodeEntity(projectId = pid, title = "Kaelen Vane", content = "Exiled Sun Knight protagonist", nodeType = "Character", colorHex = "#3B82F6", xPos = 100f, yPos = 550f, markerIcon = "person", documentNote = "# Kaelen Vane\n- **Age**: 22\n- **Weapon**: Sol Blade\n- **Goal**: Restore honour.")
+        val c2 = CanvasNodeEntity(projectId = pid, title = "Lyra Shadowsong", content = "Guild assassin & confidante", nodeType = "Character", colorHex = "#10B981", xPos = 700f, yPos = 550f, markerIcon = "person")
+        val c1Id = repository.insertNode(c1)
+        val c2Id = repository.insertNode(c2)
+
+        repository.insertConnection(NodeConnectionEntity(projectId = pid, fromNodeId = rootId, toNodeId = k1Id, label = "Capital Realm"))
+        repository.insertConnection(NodeConnectionEntity(projectId = pid, fromNodeId = rootId, toNodeId = k2Id, label = "Underworld"))
+        repository.insertConnection(NodeConnectionEntity(projectId = pid, fromNodeId = k1Id, toNodeId = c1Id, label = "Native Knight"))
+        repository.insertConnection(NodeConnectionEntity(projectId = pid, fromNodeId = k2Id, toNodeId = c2Id, label = "Operative"))
+        repository.insertConnection(NodeConnectionEntity(projectId = pid, fromNodeId = c1Id, toNodeId = c2Id, label = "Secret Allies"))
+    }
+
+    private suspend fun seedThreeActPlot(pid: Long) {
+        val n1 = CanvasNodeEntity(projectId = pid, title = "Act 1: Inciting Event", content = "The quiet village is raided by mystery riders.", nodeType = "Event", colorHex = "#3B82F6", xPos = 100f, yPos = 200f)
+        val n2 = CanvasNodeEntity(projectId = pid, title = "Act 2: Midpoint Climax", content = "Discovery of the ancient dragon seal.", nodeType = "Event", colorHex = "#F59E0B", xPos = 450f, yPos = 200f)
+        val n3 = CanvasNodeEntity(projectId = pid, title = "Act 3: Final Battle", content = "Confrontation at the Eclipse Citadel.", nodeType = "Conclusion", colorHex = "#EF4444", xPos = 800f, yPos = 200f)
+
+        val id1 = repository.insertNode(n1)
+        val id2 = repository.insertNode(n2)
+        val id3 = repository.insertNode(n3)
+
+        repository.insertConnection(NodeConnectionEntity(projectId = pid, fromNodeId = id1, toNodeId = id2, label = "Escalates to"))
+        repository.insertConnection(NodeConnectionEntity(projectId = pid, fromNodeId = id2, toNodeId = id3, label = "Culminates in"))
+    }
+
+    private suspend fun seedCharacterMatrix(pid: Long) {
+        val hero = CanvasNodeEntity(projectId = pid, title = "Protagonist", content = "Driven, passionate hero.", nodeType = "Character", colorHex = "#3B82F6", xPos = 200f, yPos = 200f, markerIcon = "person")
+        val rival = CanvasNodeEntity(projectId = pid, title = "Rival / Antagonist", content = "Cold, calculating strategist.", nodeType = "Character", colorHex = "#EF4444", xPos = 600f, yPos = 200f, markerIcon = "person")
+
+        val hId = repository.insertNode(hero)
+        val rId = repository.insertNode(rival)
+
+        repository.insertConnection(NodeConnectionEntity(projectId = pid, fromNodeId = hId, toNodeId = rId, label = "Arch Rivals"))
+    }
+
+    private suspend fun seedChapterTimeline(pid: Long) {
+        val ch1 = CanvasNodeEntity(projectId = pid, title = "Chapter 1: The Call", content = "Hero leaves home village.", nodeType = "Chapter", colorHex = "#8B5CF6", xPos = 100f, yPos = 250f, dateLabel = "Day 1")
+        val ch2 = CanvasNodeEntity(projectId = pid, title = "Chapter 2: The Forest", content = "Encounter with wild spirits.", nodeType = "Chapter", colorHex = "#10B981", xPos = 400f, yPos = 250f, dateLabel = "Day 3")
+        val ch3 = CanvasNodeEntity(projectId = pid, title = "Chapter 3: Royal Gate", content = "Entry into the capital city.", nodeType = "Chapter", colorHex = "#F59E0B", xPos = 700f, yPos = 250f, dateLabel = "Day 7")
+
+        val id1 = repository.insertNode(ch1)
+        val id2 = repository.insertNode(ch2)
+        val id3 = repository.insertNode(ch3)
+
+        repository.insertConnection(NodeConnectionEntity(projectId = pid, fromNodeId = id1, toNodeId = id2, label = "Next"))
+        repository.insertConnection(NodeConnectionEntity(projectId = pid, fromNodeId = id2, toNodeId = id3, label = "Next"))
     }
 
     fun deleteProject(project: StoryProjectEntity) {
@@ -137,8 +254,19 @@ class StoryViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun addNode(title: String, content: String, nodeType: String, colorHex: String, x: Float = 200f, y: Float = 200f) {
+    fun addNode(
+        title: String,
+        content: String,
+        nodeType: String,
+        colorHex: String,
+        markerIcon: String = "star",
+        tags: String = "",
+        x: Float = 200f,
+        y: Float = 200f
+    ) {
         val pid = currentProjectId ?: return
+        val finalX = if (isSnapToGrid) (kotlin.math.round(x / gridSize) * gridSize) else x
+        val finalY = if (isSnapToGrid) (kotlin.math.round(y / gridSize) * gridSize) else y
         viewModelScope.launch {
             val node = CanvasNodeEntity(
                 projectId = pid,
@@ -147,24 +275,30 @@ class StoryViewModel(application: Application) : AndroidViewModel(application) {
                 content = content,
                 nodeType = nodeType,
                 colorHex = colorHex,
-                xPos = x,
-                yPos = y
+                markerIcon = markerIcon,
+                tags = tags,
+                xPos = finalX,
+                yPos = finalY
             )
             repository.insertNode(node)
+            SoundEffectManager.playAddNode()
         }
     }
 
     fun updateNodePosition(nodeId: Long, x: Float, y: Float) {
         val currentNodes = nodes.value
         val node = currentNodes.find { it.id == nodeId } ?: return
+        val finalX = if (isSnapToGrid) (kotlin.math.round(x / gridSize) * gridSize) else x
+        val finalY = if (isSnapToGrid) (kotlin.math.round(y / gridSize) * gridSize) else y
         viewModelScope.launch {
-            repository.updateNode(node.copy(xPos = x, yPos = y))
+            repository.updateNode(node.copy(xPos = finalX, yPos = finalY))
         }
     }
 
     fun updateNodeDetails(node: CanvasNodeEntity) {
         viewModelScope.launch {
             repository.updateNode(node.copy(updatedAt = System.currentTimeMillis()))
+            SoundEffectManager.playClick()
         }
     }
 
@@ -174,18 +308,25 @@ class StoryViewModel(application: Application) : AndroidViewModel(application) {
             if (selectedNodeForDetail?.id == node.id) {
                 selectedNodeForDetail = null
             }
+            if (selectedDocumentNode?.id == node.id) {
+                selectedDocumentNode = null
+            }
+            SoundEffectManager.playDelete()
         }
     }
 
     fun duplicateNode(node: CanvasNodeEntity) {
+        val finalX = if (isSnapToGrid) (kotlin.math.round((node.xPos + gridSize) / gridSize) * gridSize) else node.xPos + 40f
+        val finalY = if (isSnapToGrid) (kotlin.math.round((node.yPos + gridSize) / gridSize) * gridSize) else node.yPos + 40f
         viewModelScope.launch {
             val dup = node.copy(
                 id = 0L,
                 title = "${node.title} (Copy)",
-                xPos = node.xPos + 40f,
-                yPos = node.yPos + 40f
+                xPos = finalX,
+                yPos = finalY
             )
             repository.insertNode(dup)
+            SoundEffectManager.playAddNode()
         }
     }
 
@@ -194,6 +335,7 @@ class StoryViewModel(application: Application) : AndroidViewModel(application) {
         if (fromId == toId) return
         viewModelScope.launch {
             repository.insertConnection(NodeConnectionEntity(projectId = pid, fromNodeId = fromId, toNodeId = toId, label = label))
+            SoundEffectManager.playConnect()
         }
     }
 
@@ -201,5 +343,60 @@ class StoryViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             repository.deleteConnection(conn)
         }
+    }
+
+    // Auto Layout Structures (Tree, Timeline, Grid)
+    fun arrangeStructure(structureType: String) {
+        val currentNodes = nodes.value
+        if (currentNodes.isEmpty()) return
+        viewModelScope.launch {
+            when (structureType) {
+                "TIMELINE" -> {
+                    var x = 100f
+                    for (node in currentNodes) {
+                        repository.updateNode(node.copy(xPos = x, yPos = 300f))
+                        x += 320f
+                    }
+                }
+                "TREE" -> {
+                    var x = 100f
+                    var y = 100f
+                    for ((index, node) in currentNodes.withIndex()) {
+                        x = 100f + (index % 3) * 320f
+                        y = 100f + (index / 3) * 200f
+                        repository.updateNode(node.copy(xPos = x, yPos = y))
+                    }
+                }
+                else -> {
+                    var x = 150f
+                    var y = 150f
+                    for ((index, node) in currentNodes.withIndex()) {
+                        x = 150f + (index % 3) * 300f
+                        y = 150f + (index / 3) * 220f
+                        repository.updateNode(node.copy(xPos = x, yPos = y))
+                    }
+                }
+            }
+            SoundEffectManager.playClick()
+        }
+    }
+
+    // Export Story Project as Markdown String
+    fun generateMarkdownExport(): String {
+        val currentNodes = allProjectNodes.value
+        val sb = StringBuilder()
+        sb.append("# Story Outline Export\n\n")
+
+        for (node in currentNodes) {
+            sb.append("## [${node.nodeType}] ${node.title}\n")
+            if (node.content.isNotBlank()) {
+                sb.append("**Summary**: ${node.content}\n\n")
+            }
+            if (node.documentNote.isNotBlank()) {
+                sb.append("${node.documentNote}\n\n")
+            }
+            sb.append("---\n\n")
+        }
+        return sb.toString()
     }
 }
