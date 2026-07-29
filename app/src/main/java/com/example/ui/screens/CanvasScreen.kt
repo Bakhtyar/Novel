@@ -326,10 +326,17 @@ fun CanvasScreen(
                                 val tX = toNode.xPos + toDrag.x
                                 val tY = toNode.yPos + toDrag.y
 
-                                val startX = if (tX > fX) fX + 230f else fX
-                                val startY = fY + 60f
-                                val endX = if (tX > fX) tX else tX + 230f
-                                val endY = tY + 60f
+                                val fXPx = fX.dp.toPx()
+                                val fYPx = fY.dp.toPx()
+                                val tXPx = tX.dp.toPx()
+                                val tYPx = tY.dp.toPx()
+                                val widthPx = 230.dp.toPx()
+                                val heightPx = 60.dp.toPx()
+
+                                val startX = if (tX > fX) fXPx + widthPx else fXPx
+                                val startY = fYPx + heightPx
+                                val endX = if (tX > fX) tXPx else tXPx + widthPx
+                                val endY = tYPx + heightPx
 
                                 val controlX1 = startX + (endX - startX) / 2
                                 val controlX2 = startX + (endX - startX) / 2
@@ -708,15 +715,21 @@ fun SmartStoryNodeCard(
             modifier = Modifier
                 .width(230.dp)
                 .pointerInput(node.id, zoomScale) {
+                    val density = density
+                    var currentDragOffset = Offset.Zero
                     detectDragGestures(
+                        onDragStart = {
+                            currentDragOffset = dragOffset
+                        },
                         onDragEnd = {
-                            onDragEnd(dragOffset.x, dragOffset.y)
+                            onDragEnd(currentDragOffset.x, currentDragOffset.y)
                         },
                         onDrag = { change, dragAmount ->
                             change.consume()
-                            val dx = dragAmount.x / zoomScale
-                            val dy = dragAmount.y / zoomScale
-                            onDragUpdate(Offset(dragOffset.x + dx, dragOffset.y + dy))
+                            val dx = (dragAmount.x / zoomScale) / density
+                            val dy = (dragAmount.y / zoomScale) / density
+                            currentDragOffset = Offset(currentDragOffset.x + dx, currentDragOffset.y + dy)
+                            onDragUpdate(currentDragOffset)
                         }
                     )
                 }
