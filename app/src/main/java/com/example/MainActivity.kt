@@ -8,8 +8,6 @@ import androidx.activity.viewModels
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -17,6 +15,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import com.example.ui.screens.CanvasScreen
 import com.example.ui.screens.HomeScreen
 import com.example.ui.screens.SettingsScreen
+import com.example.ui.theme.StoryCanvasTheme
 import com.example.ui.viewmodel.StoryViewModel
 
 class MainActivity : ComponentActivity() {
@@ -28,18 +27,12 @@ class MainActivity : ComponentActivity() {
         setContent {
             val isDark = viewModel.isDarkMode
             val isArabic = viewModel.language == "ar"
-            var currentScreen by remember { mutableStateOf("home") } // "home", "settings", "canvas"
-
-            val colorScheme = if (isDark) {
-                darkColorScheme()
-            } else {
-                lightColorScheme()
-            }
+            var currentScreen by remember { mutableStateOf("home") }
 
             val layoutDirection = if (isArabic) LayoutDirection.Rtl else LayoutDirection.Ltr
 
             CompositionLocalProvider(LocalLayoutDirection provides layoutDirection) {
-                MaterialTheme(colorScheme = colorScheme) {
+                StoryCanvasTheme(darkTheme = isDark) {
                     Surface(
                         modifier = Modifier.fillMaxSize(),
                         color = MaterialTheme.colorScheme.background
@@ -70,7 +63,6 @@ class MainActivity : ComponentActivity() {
                             }
                         }
 
-                        // Watch project opening to switch screen to canvas automatically
                         LaunchedEffect(projectId) {
                             if (projectId != null && currentScreen == "home") {
                                 currentScreen = "canvas"
